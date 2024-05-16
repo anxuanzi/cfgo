@@ -22,11 +22,13 @@ type logger interface {
 	Debugf(format string, a ...interface{})
 }
 
+var configInstance Config
+
 func NewEnvFile(configFolder string, logger logger) Config {
 	conf := &EnvLoader{logger: logger}
 	conf.read(configFolder)
-
-	return conf
+	configInstance = conf
+	return configInstance
 }
 
 func (e *EnvLoader) read(folder string) {
@@ -78,4 +80,12 @@ func (e *EnvLoader) GetOrDefault(key, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func Get(key string) string {
+	return configInstance.Get(key)
+}
+
+func GetOrDefault(key, defaultValue string) string {
+	return configInstance.GetOrDefault(key, defaultValue)
 }
