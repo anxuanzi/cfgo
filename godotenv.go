@@ -102,3 +102,7 @@ func Get(key string) string {
 func GetOrDefault(key, defaultValue string) string {
 	return configInstance.GetOrDefault(key, defaultValue)
 }
+
+func GetArray(key string) []string {
+	return configInstance.GetArray(key)
+}
