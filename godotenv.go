@@ -3,6 +3,7 @@ package cfgo
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -80,6 +81,18 @@ func (e *EnvLoader) GetOrDefault(key, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func (e *EnvLoader) GetArray(key string) []string {
+	envStr := e.Get(key)
+	if envStr == "" {
+		return nil
+	}
+	strArr := strings.Split(envStr, ",")
+	for i, s := range strArr {
+		strArr[i] = strings.TrimSpace(s)
+	}
+	return strArr
 }
 
 func Get(key string) string {
