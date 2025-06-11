@@ -24,6 +24,28 @@ go get github.com/anxuanzi/cfgo
 
 ## Quick Start
 
+### Using the Global Instance
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/anxuanzi/cfgo"
+)
+
+func main() {
+    // Use the global configuration instance directly
+    dbHost := cfgo.GetString("DB_HOST")
+    dbPort := cfgo.GetInt("DB_PORT")
+    debugMode := cfgo.GetBool("DEBUG_MODE")
+
+    fmt.Printf("Database: %s:%d, Debug Mode: %v\n", dbHost, dbPort, debugMode)
+}
+```
+
+### Using a Custom Instance
+
 ```go
 package main
 
@@ -35,12 +57,12 @@ import (
 func main() {
     // Create a new configuration instance
     config := cfgo.New()
-    
+
     // Get configuration values
     dbHost := config.GetString("DB_HOST")
     dbPort := config.GetInt("DB_PORT")
     debugMode := config.GetBool("DEBUG_MODE")
-    
+
     fmt.Printf("Database: %s:%d, Debug Mode: %v\n", dbHost, dbPort, debugMode)
 }
 ```
@@ -76,6 +98,29 @@ System environment variables take precedence over values defined in environment 
 
 ### Basic Usage
 
+#### Using the Global Instance
+
+```go
+// Get string value
+appName := cfgo.GetString("APP_NAME")
+
+// Get integer value
+port := cfgo.GetInt("PORT")
+
+// Get boolean value
+debug := cfgo.GetBool("DEBUG")
+
+// Get duration value
+timeout := cfgo.GetDuration("TIMEOUT")
+
+// Check if a configuration key exists
+if cfgo.Has("FEATURE_FLAG") {
+    // Use feature flag
+}
+```
+
+#### Using a Custom Instance
+
 ```go
 // Create a new configuration instance
 config := cfgo.New()
@@ -100,6 +145,18 @@ if config.Has("FEATURE_FLAG") {
 
 ### Setting Values Programmatically
 
+#### Using the Global Instance
+
+```go
+// Set a configuration value
+cfgo.Set("CACHE_TTL", "60s")
+
+// Get the value
+cacheTTL := cfgo.GetDuration("CACHE_TTL")
+```
+
+#### Using a Custom Instance
+
 ```go
 config := cfgo.New()
 
@@ -112,7 +169,24 @@ cacheTTL := config.GetDuration("CACHE_TTL")
 
 ### Working with Slices and Maps
 
+#### Using the Global Instance
+
 ```go
+// Get a comma-separated list as a slice
+// ENV: ALLOWED_ORIGINS=https://example.com,https://api.example.com
+origins := cfgo.GetStringSlice("ALLOWED_ORIGINS")
+
+// Get a nested map
+// ENV: DB_CONFIG.HOST=localhost
+// ENV: DB_CONFIG.PORT=5432
+dbConfig := cfgo.GetStringMap("DB_CONFIG")
+```
+
+#### Using a Custom Instance
+
+```go
+config := cfgo.New()
+
 // Get a comma-separated list as a slice
 // ENV: ALLOWED_ORIGINS=https://example.com,https://api.example.com
 origins := config.GetStringSlice("ALLOWED_ORIGINS")
@@ -124,6 +198,8 @@ dbConfig := config.GetStringMap("DB_CONFIG")
 ```
 
 ### Custom Configuration Sources
+
+#### Using the Global Instance
 
 ```go
 type JSONConfigSource struct {
@@ -150,13 +226,57 @@ func (j *JSONConfigSource) Watch(callback func(map[string]any)) error {
     return nil
 }
 
-// Usage
+// Usage with global instance
+cfgo.AddSource(NewJSONConfigSource("config.json"))
+cfgo.Reload()
+```
+
+#### Using a Custom Instance
+
+```go
+type JSONConfigSource struct {
+    path string
+    data map[string]any
+}
+
+func NewJSONConfigSource(path string) *JSONConfigSource {
+    return &JSONConfigSource{path: path}
+}
+
+func (j *JSONConfigSource) Name() string {
+    return "json-config"
+}
+
+func (j *JSONConfigSource) Load() (map[string]any, error) {
+    // Load JSON file and parse it
+    // ...
+    return j.data, nil
+}
+
+func (j *JSONConfigSource) Watch(callback func(map[string]any)) error {
+    // Implement file watching if needed
+    return nil
+}
+
+// Usage with custom instance
 config := cfgo.New()
 config.AddSource(NewJSONConfigSource("config.json"))
 config.Reload()
 ```
 
 ### Reloading Configuration
+
+#### Using the Global Instance
+
+```go
+// Later, reload configuration (e.g., after receiving SIGHUP)
+err := cfgo.Reload()
+if err != nil {
+    log.Fatalf("Failed to reload configuration: %v", err)
+}
+```
+
+#### Using a Custom Instance
 
 ```go
 config := cfgo.New()
@@ -176,43 +296,43 @@ if err != nil {
 type Config interface {
     // Get retrieves a configuration value by key
     Get(key string) any
-    
+
     // GetString retrieves a string configuration value
     GetString(key string) string
-    
+
     // GetInt retrieves an integer configuration value
     GetInt(key string) int
-    
+
     // GetInt64 retrieves an int64 configuration value
     GetInt64(key string) int64
-    
+
     // GetFloat64 retrieves a float64 configuration value
     GetFloat64(key string) float64
-    
+
     // GetBool retrieves a boolean configuration value
     GetBool(key string) bool
-    
+
     // GetDuration retrieves a time.Duration configuration value
     GetDuration(key string) time.Duration
-    
+
     // GetStringSlice retrieves a string slice configuration value
     GetStringSlice(key string) []string
-    
+
     // GetStringMap retrieves a string map configuration value
     GetStringMap(key string) map[string]any
-    
+
     // Set sets a configuration value
     Set(key string, value any)
-    
+
     // Has checks if a configuration key exists
     Has(key string) bool
-    
+
     // All returns all configuration values
     All() map[string]any
-    
+
     // Reload reloads the configuration from sources
     Reload() error
-    
+
     // AddSource adds a configuration source
     AddSource(source ConfigSource)
 }
@@ -224,10 +344,10 @@ type Config interface {
 type ConfigSource interface {
     // Name returns the name of the configuration source
     Name() string
-    
+
     // Load loads configuration from the source
     Load() (map[string]any, error)
-    
+
     // Watch watches for configuration changes
     Watch(callback func(map[string]any)) error
 }

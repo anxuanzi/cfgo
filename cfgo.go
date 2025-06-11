@@ -18,6 +18,14 @@ type config struct {
 	cache   map[string]any
 }
 
+// Global instance of the configuration
+var defaultConfig Config
+
+// init initializes the default global configuration instance
+func init() {
+	defaultConfig = New()
+}
+
 // New creates a new config instance
 func New() Config {
 	c := &config{
@@ -292,4 +300,76 @@ func (c *config) AddSource(source ConfigSource) {
 	defer c.mu.Unlock()
 
 	c.sources = append(c.sources, source)
+}
+
+// Global functions that delegate to the default config instance
+
+// Get retrieves a configuration value by key from the default config
+func Get(key string) any {
+	return defaultConfig.Get(key)
+}
+
+// GetString retrieves a string configuration value from the default config
+func GetString(key string) string {
+	return defaultConfig.GetString(key)
+}
+
+// GetInt retrieves an integer configuration value from the default config
+func GetInt(key string) int {
+	return defaultConfig.GetInt(key)
+}
+
+// GetInt64 retrieves an int64 configuration value from the default config
+func GetInt64(key string) int64 {
+	return defaultConfig.GetInt64(key)
+}
+
+// GetFloat64 retrieves a float64 configuration value from the default config
+func GetFloat64(key string) float64 {
+	return defaultConfig.GetFloat64(key)
+}
+
+// GetBool retrieves a boolean configuration value from the default config
+func GetBool(key string) bool {
+	return defaultConfig.GetBool(key)
+}
+
+// GetDuration retrieves a time.Duration configuration value from the default config
+func GetDuration(key string) time.Duration {
+	return defaultConfig.GetDuration(key)
+}
+
+// GetStringSlice retrieves a string slice configuration value from the default config
+func GetStringSlice(key string) []string {
+	return defaultConfig.GetStringSlice(key)
+}
+
+// GetStringMap retrieves a string map configuration value from the default config
+func GetStringMap(key string) map[string]any {
+	return defaultConfig.GetStringMap(key)
+}
+
+// Set sets a configuration value in the default config
+func Set(key string, value any) {
+	defaultConfig.Set(key, value)
+}
+
+// Has checks if a configuration key exists in the default config
+func Has(key string) bool {
+	return defaultConfig.Has(key)
+}
+
+// All returns all configuration values from the default config
+func All() map[string]any {
+	return defaultConfig.All()
+}
+
+// Reload reloads the configuration from sources in the default config
+func Reload() error {
+	return defaultConfig.Reload()
+}
+
+// AddSource adds a configuration source to the default config
+func AddSource(source ConfigSource) {
+	defaultConfig.AddSource(source)
 }
