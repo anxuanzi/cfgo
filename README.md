@@ -16,6 +16,12 @@ CFGO is a lightweight, zero-dependency configuration library for Go applications
 - **Thread-Safe**: Safe for concurrent use
 - **Caching**: Caches configuration values for better performance
 
+## Who's Using CFGO
+
+CFGO is being used in the following projects:
+
+- [Goe Application Development Framework](https://github.com/oeasenet/goe) - A comprehensive application development framework
+
 ## Installation
 
 ```bash
