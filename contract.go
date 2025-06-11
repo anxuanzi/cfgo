@@ -42,6 +42,9 @@ type Config interface {
 
 	// Reload reloads the configuration from sources
 	Reload() error
+
+	// AddSource adds a configuration source
+	AddSource(source ConfigSource)
 }
 
 // ConfigSource represents a source of configuration values
