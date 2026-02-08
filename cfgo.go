@@ -107,19 +107,25 @@ func (c *config) loadSystemEnv() {
 // Get retrieves a configuration value by key
 func (c *config) Get(key string) any {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	// Check cache first
 	if val, ok := c.cache[key]; ok {
+		c.mu.RUnlock()
 		return val
 	}
 
 	// Check data
 	if val, ok := c.data[key]; ok {
+		c.mu.RUnlock()
+
+		// Upgrade to write lock to update cache
+		c.mu.Lock()
 		c.cache[key] = val
+		c.mu.Unlock()
+
 		return val
 	}
 
+	c.mu.RUnlock()
 	return nil
 }
 
