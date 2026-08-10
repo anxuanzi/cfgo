@@ -32,27 +32,19 @@ func (m *MockConfigSource) Watch(callback func(map[string]any)) error {
 	return nil
 }
 
-// Helper function to create a temporary env file for testing
-func createTempEnvFile(t *testing.T, filename string, content string) {
+// writeEnvFile writes an env file into the current working directory.
+// Callers must first isolate themselves with t.Chdir(t.TempDir()) so tests
+// can never touch a real .env file in the repository checkout.
+func writeEnvFile(t *testing.T, filename string, content string) {
 	t.Helper()
-	err := os.WriteFile(filename, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create temp env file: %v", err)
-	}
-}
-
-// Helper function to clean up temporary env files
-func cleanupTempEnvFiles(t *testing.T, files ...string) {
-	t.Helper()
-	for _, file := range files {
-		os.Remove(file)
+	if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to create env file %s: %v", filename, err)
 	}
 }
 
 func TestNew(t *testing.T) {
-	// Set environment variable for testing
-	os.Setenv("TEST_ENV_VAR", "test_value")
-	defer os.Unsetenv("TEST_ENV_VAR")
+	t.Chdir(t.TempDir())
+	t.Setenv("TEST_ENV_VAR", "test_value")
 
 	cfg := New()
 
@@ -63,15 +55,12 @@ func TestNew(t *testing.T) {
 }
 
 func TestLoadEnvFiles(t *testing.T) {
-	// Create temporary env files
-	createTempEnvFile(t, ".env", "BASE_KEY=base_value\nSHARED_KEY=base_shared")
-	createTempEnvFile(t, ".local.env", "LOCAL_KEY=local_value\nSHARED_KEY=local_shared")
-	createTempEnvFile(t, ".dev.env", "DEV_KEY=dev_value\nSHARED_KEY=dev_shared")
-	defer cleanupTempEnvFiles(t, ".env", ".local.env", ".dev.env")
+	t.Chdir(t.TempDir())
+	writeEnvFile(t, ".env", "BASE_KEY=base_value\nSHARED_KEY=base_shared")
+	writeEnvFile(t, ".local.env", "LOCAL_KEY=local_value\nSHARED_KEY=local_shared")
+	writeEnvFile(t, ".dev.env", "DEV_KEY=dev_value\nSHARED_KEY=dev_shared")
 
-	// Set APP_ENV to dev
-	os.Setenv("APP_ENV", "dev")
-	defer os.Unsetenv("APP_ENV")
+	t.Setenv("APP_ENV", "dev")
 
 	cfg := New()
 
@@ -237,9 +226,8 @@ func TestAll(t *testing.T) {
 }
 
 func TestReload(t *testing.T) {
-	// Create temporary env files
-	createTempEnvFile(t, ".env", "RELOAD_KEY=initial_value")
-	defer cleanupTempEnvFiles(t, ".env")
+	t.Chdir(t.TempDir())
+	writeEnvFile(t, ".env", "RELOAD_KEY=initial_value")
 
 	cfg := New()
 
@@ -249,7 +237,7 @@ func TestReload(t *testing.T) {
 	}
 
 	// Update env file
-	createTempEnvFile(t, ".env", "RELOAD_KEY=updated_value")
+	writeEnvFile(t, ".env", "RELOAD_KEY=updated_value")
 
 	// Reload configuration
 	err := cfg.Reload()
@@ -264,6 +252,8 @@ func TestReload(t *testing.T) {
 }
 
 func TestAddSource(t *testing.T) {
+	t.Chdir(t.TempDir())
+
 	cfg := New()
 
 	// Create mock config source
