@@ -77,9 +77,23 @@ func TestLoadEnvFiles(t *testing.T) {
 		t.Errorf("Expected DEV_KEY to be 'dev_value', got '%s'", cfg.GetString("DEV_KEY"))
 	}
 
-	// Test that shared key has the value from the highest precedence file (.dev.env)
-	if cfg.GetString("SHARED_KEY") != "dev_shared" {
-		t.Errorf("Expected SHARED_KEY to be 'dev_shared', got '%s'", cfg.GetString("SHARED_KEY"))
+	// .local.env is the developer's personal override file: it must win over
+	// the committed environment-specific file (.env < .dev.env < .local.env).
+	if cfg.GetString("SHARED_KEY") != "local_shared" {
+		t.Errorf("Expected SHARED_KEY to be 'local_shared', got '%s'", cfg.GetString("SHARED_KEY"))
+	}
+}
+
+func TestLocalEnvOverridesEnvSpecificFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeEnvFile(t, ".prod.env", "DB_HOST=prod.internal")
+	writeEnvFile(t, ".local.env", "DB_HOST=localhost")
+	t.Setenv("APP_ENV", "prod")
+
+	cfg := New()
+
+	if got := cfg.GetString("DB_HOST"); got != "localhost" {
+		t.Errorf("personal .local.env must override the committed .prod.env, got %q", got)
 	}
 }
 

@@ -39,22 +39,22 @@ func New() Config {
 	}
 }
 
-// loadEnvFiles loads environment files into m, later files overriding earlier ones
+// loadEnvFiles loads environment files into m, later files overriding earlier
+// ones: .env (base) < .{APP_ENV}.env (environment-specific) < .local.env
+// (personal, uncommitted overrides).
 func loadEnvFiles(m map[string]any) {
-	// Always load .env first if it exists
+	// Base configuration
 	loadEnvFile(m, ".env")
 
-	// Then load .local.env which can override .env values
-	loadEnvFile(m, ".local.env")
-
-	// Load environment-specific file based on APP_ENV
+	// Environment-specific file based on APP_ENV (default "dev")
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "dev"
 	}
+	loadEnvFile(m, fmt.Sprintf(".%s.env", env))
 
-	envFile := fmt.Sprintf(".%s.env", env)
-	loadEnvFile(m, envFile)
+	// Personal overrides load last so they win over committed files
+	loadEnvFile(m, ".local.env")
 }
 
 // loadEnvFile loads a single env file into m
