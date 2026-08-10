@@ -290,4 +290,3 @@ func TestAddSource(t *testing.T) {
 		t.Errorf("Expected mock_key to be 'mock_value', got '%s'", cfg.GetString("mock_key"))
 	}
 }
-
