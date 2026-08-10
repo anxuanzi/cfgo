@@ -12,9 +12,10 @@ import (
 
 // config implements the Config interface
 type config struct {
-	mu      sync.RWMutex
-	data    map[string]any
-	sources []ConfigSource
+	mu        sync.RWMutex
+	data      map[string]any // values loaded from files, environment, and sources
+	overrides map[string]any // values set programmatically via Set; survive Reload
+	sources   []ConfigSource
 }
 
 // Global instance of the configuration
@@ -27,27 +28,24 @@ func init() {
 
 // New creates a new config instance
 func New() Config {
-	c := &config{
-		data:    make(map[string]any),
-		sources: make([]ConfigSource, 0),
+	data := make(map[string]any)
+	loadEnvFiles(data)
+	loadSystemEnv(data)
+
+	return &config{
+		data:      data,
+		overrides: make(map[string]any),
+		sources:   make([]ConfigSource, 0),
 	}
-
-	// Load default env files
-	c.loadEnvFiles()
-
-	// Load system environment variables
-	c.loadSystemEnv()
-
-	return c
 }
 
-// loadEnvFiles loads environment files in order
-func (c *config) loadEnvFiles() {
+// loadEnvFiles loads environment files into m, later files overriding earlier ones
+func loadEnvFiles(m map[string]any) {
 	// Always load .env first if it exists
-	c.loadEnvFile(".env")
+	loadEnvFile(m, ".env")
 
 	// Then load .local.env which can override .env values
-	c.loadEnvFile(".local.env")
+	loadEnvFile(m, ".local.env")
 
 	// Load environment-specific file based on APP_ENV
 	env := os.Getenv("APP_ENV")
@@ -56,16 +54,16 @@ func (c *config) loadEnvFiles() {
 	}
 
 	envFile := fmt.Sprintf(".%s.env", env)
-	c.loadEnvFile(envFile)
+	loadEnvFile(m, envFile)
 }
 
-// loadEnvFile loads a single env file
-func (c *config) loadEnvFile(filename string) {
+// loadEnvFile loads a single env file into m
+func loadEnvFile(m map[string]any, filename string) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return // File doesn't exist, skip
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -88,16 +86,16 @@ func (c *config) loadEnvFile(filename string) {
 		// Remove quotes if present
 		value = strings.Trim(value, `"'`)
 
-		c.data[key] = value
+		m[key] = value
 	}
 }
 
-// loadSystemEnv loads system environment variables
-func (c *config) loadSystemEnv() {
+// loadSystemEnv loads system environment variables into m
+func loadSystemEnv(m map[string]any) {
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) == 2 {
-			c.data[parts[0]] = parts[1]
+			m[parts[0]] = parts[1]
 		}
 	}
 }
@@ -107,6 +105,9 @@ func (c *config) Get(key string) any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if val, ok := c.overrides[key]; ok {
+		return val
+	}
 	return c.data[key]
 }
 
@@ -210,20 +211,28 @@ func (c *config) GetStringMap(key string) map[string]any {
 
 	for k, v := range c.data {
 		if strings.HasPrefix(k, prefix) {
-			mapKey := strings.TrimPrefix(k, prefix)
-			result[mapKey] = v
+			result[strings.TrimPrefix(k, prefix)] = v
+		}
+	}
+	for k, v := range c.overrides {
+		if strings.HasPrefix(k, prefix) {
+			result[strings.TrimPrefix(k, prefix)] = v
 		}
 	}
 
 	return result
 }
 
-// Set sets a configuration value
+// Set sets a configuration value. Values set this way take precedence over
+// every loaded source and survive Reload.
 func (c *config) Set(key string, value any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data[key] = value
+	if c.overrides == nil {
+		c.overrides = make(map[string]any)
+	}
+	c.overrides[key] = value
 }
 
 // Has checks if a configuration key exists
@@ -231,6 +240,9 @@ func (c *config) Has(key string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if _, ok := c.overrides[key]; ok {
+		return true
+	}
 	_, ok := c.data[key]
 	return ok
 }
@@ -240,39 +252,46 @@ func (c *config) All() map[string]any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	result := make(map[string]any)
+	result := make(map[string]any, len(c.data)+len(c.overrides))
 	for k, v := range c.data {
+		result[k] = v
+	}
+	for k, v := range c.overrides {
 		result[k] = v
 	}
 
 	return result
 }
 
-// Reload reloads the configuration from sources
+// Reload rebuilds the configuration from env files, system environment, and
+// registered sources. The rebuild is all-or-nothing: if any source fails, the
+// previous configuration stays fully intact and the error names the source.
+// Values set via Set are kept.
 func (c *config) Reload() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	sources := make([]ConfigSource, len(c.sources))
+	copy(sources, c.sources)
+	c.mu.RUnlock()
 
-	// Clear data
-	c.data = make(map[string]any)
+	// Build the new state without holding the lock; readers keep working
+	// against the previous state until the swap.
+	newData := make(map[string]any)
+	loadEnvFiles(newData)
+	loadSystemEnv(newData)
 
-	// Reload env files first (.env, then .local.env, then .{GOE_ENV}.env)
-	c.loadEnvFiles()
-
-	// Reload system env last to ensure highest priority
-	c.loadSystemEnv()
-
-	// Reload from custom sources
-	for _, source := range c.sources {
+	for _, source := range sources {
 		data, err := source.Load()
 		if err != nil {
-			return err
+			return fmt.Errorf("cfgo: reload source %q: %w", source.Name(), err)
 		}
-
 		for k, v := range data {
-			c.data[k] = v
+			newData[k] = v
 		}
 	}
+
+	c.mu.Lock()
+	c.data = newData
+	c.mu.Unlock()
 
 	return nil
 }
