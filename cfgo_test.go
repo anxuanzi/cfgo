@@ -32,27 +32,19 @@ func (m *MockConfigSource) Watch(callback func(map[string]any)) error {
 	return nil
 }
 
-// Helper function to create a temporary env file for testing
-func createTempEnvFile(t *testing.T, filename string, content string) {
+// writeEnvFile writes an env file into the current working directory.
+// Callers must first isolate themselves with t.Chdir(t.TempDir()) so tests
+// can never touch a real .env file in the repository checkout.
+func writeEnvFile(t *testing.T, filename string, content string) {
 	t.Helper()
-	err := os.WriteFile(filename, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create temp env file: %v", err)
-	}
-}
-
-// Helper function to clean up temporary env files
-func cleanupTempEnvFiles(t *testing.T, files ...string) {
-	t.Helper()
-	for _, file := range files {
-		os.Remove(file)
+	if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to create env file %s: %v", filename, err)
 	}
 }
 
 func TestNew(t *testing.T) {
-	// Set environment variable for testing
-	os.Setenv("TEST_ENV_VAR", "test_value")
-	defer os.Unsetenv("TEST_ENV_VAR")
+	t.Chdir(t.TempDir())
+	t.Setenv("TEST_ENV_VAR", "test_value")
 
 	cfg := New()
 
@@ -63,15 +55,12 @@ func TestNew(t *testing.T) {
 }
 
 func TestLoadEnvFiles(t *testing.T) {
-	// Create temporary env files
-	createTempEnvFile(t, ".env", "BASE_KEY=base_value\nSHARED_KEY=base_shared")
-	createTempEnvFile(t, ".local.env", "LOCAL_KEY=local_value\nSHARED_KEY=local_shared")
-	createTempEnvFile(t, ".dev.env", "DEV_KEY=dev_value\nSHARED_KEY=dev_shared")
-	defer cleanupTempEnvFiles(t, ".env", ".local.env", ".dev.env")
+	t.Chdir(t.TempDir())
+	writeEnvFile(t, ".env", "BASE_KEY=base_value\nSHARED_KEY=base_shared")
+	writeEnvFile(t, ".local.env", "LOCAL_KEY=local_value\nSHARED_KEY=local_shared")
+	writeEnvFile(t, ".dev.env", "DEV_KEY=dev_value\nSHARED_KEY=dev_shared")
 
-	// Set APP_ENV to dev
-	os.Setenv("APP_ENV", "dev")
-	defer os.Unsetenv("APP_ENV")
+	t.Setenv("APP_ENV", "dev")
 
 	cfg := New()
 
@@ -88,16 +77,29 @@ func TestLoadEnvFiles(t *testing.T) {
 		t.Errorf("Expected DEV_KEY to be 'dev_value', got '%s'", cfg.GetString("DEV_KEY"))
 	}
 
-	// Test that shared key has the value from the highest precedence file (.dev.env)
-	if cfg.GetString("SHARED_KEY") != "dev_shared" {
-		t.Errorf("Expected SHARED_KEY to be 'dev_shared', got '%s'", cfg.GetString("SHARED_KEY"))
+	// .local.env is the developer's personal override file: it must win over
+	// the committed environment-specific file (.env < .dev.env < .local.env).
+	if cfg.GetString("SHARED_KEY") != "local_shared" {
+		t.Errorf("Expected SHARED_KEY to be 'local_shared', got '%s'", cfg.GetString("SHARED_KEY"))
+	}
+}
+
+func TestLocalEnvOverridesEnvSpecificFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeEnvFile(t, ".prod.env", "DB_HOST=prod.internal")
+	writeEnvFile(t, ".local.env", "DB_HOST=localhost")
+	t.Setenv("APP_ENV", "prod")
+
+	cfg := New()
+
+	if got := cfg.GetString("DB_HOST"); got != "localhost" {
+		t.Errorf("personal .local.env must override the committed .prod.env, got %q", got)
 	}
 }
 
 func TestGetMethods(t *testing.T) {
 	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
+		data: make(map[string]any),
 	}
 
 	// Set test values
@@ -191,8 +193,7 @@ func TestGetMethods(t *testing.T) {
 
 func TestSetAndHas(t *testing.T) {
 	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
+		data: make(map[string]any),
 	}
 
 	// Test Has with non-existent key
@@ -213,20 +214,16 @@ func TestSetAndHas(t *testing.T) {
 		t.Errorf("Set failed, expected 'test_value', got '%s'", c.GetString("test_key"))
 	}
 
-	// Test cache invalidation
-	c.cache["test_key"] = "cached_value"
+	// Overwriting must be reflected immediately
 	c.Set("test_key", "new_value")
-
-	// Get should return the new value, not the cached one
 	if c.Get("test_key") != "new_value" {
-		t.Errorf("Cache invalidation failed, expected 'new_value', got '%v'", c.Get("test_key"))
+		t.Errorf("Overwrite failed, expected 'new_value', got '%v'", c.Get("test_key"))
 	}
 }
 
 func TestAll(t *testing.T) {
 	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
+		data: make(map[string]any),
 	}
 
 	c.data["key1"] = "value1"
@@ -243,9 +240,8 @@ func TestAll(t *testing.T) {
 }
 
 func TestReload(t *testing.T) {
-	// Create temporary env files
-	createTempEnvFile(t, ".env", "RELOAD_KEY=initial_value")
-	defer cleanupTempEnvFiles(t, ".env")
+	t.Chdir(t.TempDir())
+	writeEnvFile(t, ".env", "RELOAD_KEY=initial_value")
 
 	cfg := New()
 
@@ -255,7 +251,7 @@ func TestReload(t *testing.T) {
 	}
 
 	// Update env file
-	createTempEnvFile(t, ".env", "RELOAD_KEY=updated_value")
+	writeEnvFile(t, ".env", "RELOAD_KEY=updated_value")
 
 	// Reload configuration
 	err := cfg.Reload()
@@ -270,6 +266,8 @@ func TestReload(t *testing.T) {
 }
 
 func TestAddSource(t *testing.T) {
+	t.Chdir(t.TempDir())
+
 	cfg := New()
 
 	// Create mock config source
@@ -290,38 +288,5 @@ func TestAddSource(t *testing.T) {
 	// Test that value from mock source is loaded
 	if cfg.GetString("mock_key") != "mock_value" {
 		t.Errorf("Expected mock_key to be 'mock_value', got '%s'", cfg.GetString("mock_key"))
-	}
-}
-
-func TestCaching(t *testing.T) {
-	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
-	}
-
-	c.data["test_key"] = "test_value"
-
-	// First access should cache the value
-	val1 := c.Get("test_key")
-	if val1 != "test_value" {
-		t.Errorf("Expected 'test_value', got '%v'", val1)
-	}
-
-	// Modify the data directly (bypassing Set which would invalidate cache)
-	c.data["test_key"] = "modified_value"
-
-	// Second access should return cached value
-	val2 := c.Get("test_key")
-	if val2 != "test_value" {
-		t.Errorf("Expected cached 'test_value', got '%v'", val2)
-	}
-
-	// Clear cache
-	c.cache = make(map[string]any)
-
-	// Third access should get the modified value
-	val3 := c.Get("test_key")
-	if val3 != "modified_value" {
-		t.Errorf("Expected 'modified_value', got '%v'", val3)
 	}
 }
