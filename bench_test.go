@@ -39,3 +39,19 @@ func BenchmarkGetAsInt(b *testing.B) {
 		_, _ = GetAs[int](c, "BENCH_INT")
 	}
 }
+
+func BenchmarkGetString(b *testing.B) {
+	c := benchConfig()
+	for b.Loop() {
+		_ = c.GetString("BENCH_STRING")
+	}
+}
+
+func BenchmarkGetParallel(b *testing.B) {
+	c := benchConfig()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = c.Get("BENCH_STRING")
+		}
+	})
+}

@@ -204,6 +204,32 @@ never log them wholesale. Use `WithoutSystemEnv()` to keep the environment
 out, and keep secrets in real environment variables or an external source
 rather than committed env files.
 
+## Benchmarks
+
+Read-path microbenchmarks on Go 1.26.5, Apple M1 Max (darwin/arm64),
+summarized with `benchstat` over 8 runs:
+
+| Operation | Time | Allocations |
+|---|---:|---:|
+| `Get` | 14.7 ns/op | 0 |
+| `Lookup` | 15.4 ns/op | 0 |
+| `GetString` | 14.9 ns/op | 0 |
+| `GetInt` | 17.3 ns/op | 0 |
+| `GetAs[int]` | 52.9 ns/op | 1 (4 B) |
+| `Get` under contention¹ | 133 ns/op | 0 |
+
+¹ Deliberate worst case: 10 goroutines reading the same key in a tight loop,
+where the `RWMutex` reader count becomes the bottleneck. Occasional reads —
+the normal usage pattern — behave like the single-threaded rows. If a value
+sits on a genuinely hot per-request path, read it once at startup into your
+own struct.
+
+Reproduce with:
+
+```bash
+go test -run '^$' -bench . -benchmem -count=8 .
+```
+
 ## Migrating from v1.1
 
 - `.local.env` now **overrides** `.{APP_ENV}.env` (it previously lost).
