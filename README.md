@@ -1,3 +1,5 @@
+
+
 # CFGO - Environment-Based Configuration for Go
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/anxuanzi/cfgo.svg)](https://pkg.go.dev/github.com/anxuanzi/cfgo)
@@ -79,7 +81,7 @@ CFGO automatically loads configuration from the following files (in order of pre
 
 1. `.env` - Base configuration file
 2. `.local.env` - Local overrides (not committed to version control)
-3. `.{APP_ENV}.env` - Environment-specific configuration (e.g., `.dev.env`, `.prod.env`)
+3. `.{APP_ENV}.env` - Environment-specific configuration (e.g., `.dev.env`, `.prod.env`). Defaults to `.dev.env` if `APP_ENV` is not set.
 
 Example `.env` file:
 
