@@ -15,7 +15,6 @@ type config struct {
 	mu      sync.RWMutex
 	data    map[string]any
 	sources []ConfigSource
-	cache   map[string]any
 }
 
 // Global instance of the configuration
@@ -31,7 +30,6 @@ func New() Config {
 	c := &config{
 		data:    make(map[string]any),
 		sources: make([]ConfigSource, 0),
-		cache:   make(map[string]any),
 	}
 
 	// Load default env files
@@ -107,26 +105,9 @@ func (c *config) loadSystemEnv() {
 // Get retrieves a configuration value by key
 func (c *config) Get(key string) any {
 	c.mu.RLock()
-	// Check cache first
-	if val, ok := c.cache[key]; ok {
-		c.mu.RUnlock()
-		return val
-	}
+	defer c.mu.RUnlock()
 
-	// Check data
-	if val, ok := c.data[key]; ok {
-		c.mu.RUnlock()
-
-		// Upgrade to write lock to update cache
-		c.mu.Lock()
-		c.cache[key] = val
-		c.mu.Unlock()
-
-		return val
-	}
-
-	c.mu.RUnlock()
-	return nil
+	return c.data[key]
 }
 
 // GetString retrieves a string configuration value
@@ -243,7 +224,6 @@ func (c *config) Set(key string, value any) {
 	defer c.mu.Unlock()
 
 	c.data[key] = value
-	delete(c.cache, key) // Invalidate cache
 }
 
 // Has checks if a configuration key exists
@@ -272,9 +252,6 @@ func (c *config) All() map[string]any {
 func (c *config) Reload() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	// Clear cache
-	c.cache = make(map[string]any)
 
 	// Clear data
 	c.data = make(map[string]any)

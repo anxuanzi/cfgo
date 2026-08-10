@@ -96,8 +96,7 @@ func TestLoadEnvFiles(t *testing.T) {
 
 func TestGetMethods(t *testing.T) {
 	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
+		data: make(map[string]any),
 	}
 
 	// Set test values
@@ -191,8 +190,7 @@ func TestGetMethods(t *testing.T) {
 
 func TestSetAndHas(t *testing.T) {
 	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
+		data: make(map[string]any),
 	}
 
 	// Test Has with non-existent key
@@ -213,20 +211,16 @@ func TestSetAndHas(t *testing.T) {
 		t.Errorf("Set failed, expected 'test_value', got '%s'", c.GetString("test_key"))
 	}
 
-	// Test cache invalidation
-	c.cache["test_key"] = "cached_value"
+	// Overwriting must be reflected immediately
 	c.Set("test_key", "new_value")
-
-	// Get should return the new value, not the cached one
 	if c.Get("test_key") != "new_value" {
-		t.Errorf("Cache invalidation failed, expected 'new_value', got '%v'", c.Get("test_key"))
+		t.Errorf("Overwrite failed, expected 'new_value', got '%v'", c.Get("test_key"))
 	}
 }
 
 func TestAll(t *testing.T) {
 	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
+		data: make(map[string]any),
 	}
 
 	c.data["key1"] = "value1"
@@ -293,35 +287,3 @@ func TestAddSource(t *testing.T) {
 	}
 }
 
-func TestCaching(t *testing.T) {
-	c := &config{
-		data:  make(map[string]any),
-		cache: make(map[string]any),
-	}
-
-	c.data["test_key"] = "test_value"
-
-	// First access should cache the value
-	val1 := c.Get("test_key")
-	if val1 != "test_value" {
-		t.Errorf("Expected 'test_value', got '%v'", val1)
-	}
-
-	// Modify the data directly (bypassing Set which would invalidate cache)
-	c.data["test_key"] = "modified_value"
-
-	// Second access should return cached value
-	val2 := c.Get("test_key")
-	if val2 != "test_value" {
-		t.Errorf("Expected cached 'test_value', got '%v'", val2)
-	}
-
-	// Clear cache
-	c.cache = make(map[string]any)
-
-	// Third access should get the modified value
-	val3 := c.Get("test_key")
-	if val3 != "modified_value" {
-		t.Errorf("Expected 'modified_value', got '%v'", val3)
-	}
-}
